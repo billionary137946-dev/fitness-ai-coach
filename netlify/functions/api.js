@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-// 🚀 API.JS — Backend completo (Telegram + OpenAI proxy)
+// 🚀 API.JS — Backend completo (Telegram + Claude proxy)
 // ═══════════════════════════════════════════════════════════════
 // Variables de entorno requeridas en Netlify:
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
-//   TELEGRAM_BOT_TOKEN, OPENAI_API_KEY
+//   TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY
 
 const admin = require('firebase-admin');
 
@@ -80,21 +80,26 @@ async function registrarEjercicio(db, userId, ejercicio, peso, repeticiones) {
     return { rm, progreso: rm - (prev.rm_estimado_actual || 0) };
 }
 
-async function llamarOpenAI(prompt, maxTokens = 1000) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+// ── Claude (Anthropic) ────────────────────────────────────────
+async function llamarClaude(prompt, maxTokens = 1000) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-            model: 'gpt-4o',
+            model: 'claude-sonnet-4-20250514',
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }]
         })
     });
+
     const data = await res.json();
-    return data.choices[0].message.content;
+    console.log('Claude status:', res.status);
+    if (!res.ok) throw new Error(data.error?.message || 'Claude API error');
+    return data.content?.[0]?.text || 'Sin respuesta';
 }
 
 // ── Handler principal ─────────────────────────────────────────
@@ -102,23 +107,23 @@ async function llamarOpenAI(prompt, maxTokens = 1000) {
 exports.handler = async (event) => {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
-    // ── Proxy OpenAI ─────────────────────────────────────────
+    // ── Proxy Claude ──────────────────────────────────────────
     if (event.path.includes('ai-analysis')) {
         try {
             const { prompt, maxTokens } = JSON.parse(event.body);
-            const text = await llamarOpenAI(prompt, maxTokens || 1000);
+            const text = await llamarClaude(prompt, maxTokens || 1000);
             return {
                 statusCode: 200,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text })
             };
         } catch (e) {
-            console.error('OpenAI error:', e);
+            console.error('Claude error:', e);
             return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
         }
     }
 
-    // ── Telegram Webhook ─────────────────────────────────────
+    // ── Telegram Webhook ──────────────────────────────────────
     try {
         const db = getDB();
         const update = JSON.parse(event.body);
