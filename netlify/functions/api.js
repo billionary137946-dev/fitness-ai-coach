@@ -2,8 +2,9 @@
 // 🚀 API.JS — Backend completo (Telegram + Claude proxy)
 // ═══════════════════════════════════════════════════════════════
 // Variables de entorno requeridas en Netlify:
-//   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
-//   TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY
+//   FIREBASE_SERVICE_ACCOUNT  (todo el JSON del service account)
+//   TELEGRAM_BOT_TOKEN
+//   ANTHROPIC_API_KEY
 
 const admin = require('firebase-admin');
 
@@ -15,29 +16,15 @@ const EJERCICIOS_VALIDOS = [
 // ── Firebase init (lazy) ──────────────────────────────────────
 function getDB() {
     if (!admin.apps.length) {
-        const privateKey = process.env.FIREBASE_PRIVATE_KEY
-            ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-            : undefined;
-
-        console.log('Iniciando Firebase:', {
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKeyStart: privateKey ? privateKey.substring(0, 40) : 'MISSING'
-        });
-
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({
-            credential: admin.credential.cert({
-                projectId: process.env.FIREBASE_PROJECT_ID,
-                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                privateKey
-            })
+            credential: admin.credential.cert(serviceAccount)
         });
     }
     return admin.firestore();
 }
 
 // ── Helpers ───────────────────────────────────────────────────
-
 function calcularRM(peso, reps) {
     return reps === 1 ? peso : Math.round(peso * (36 / (37 - reps)));
 }
@@ -90,7 +77,7 @@ async function llamarClaude(prompt, maxTokens = 1000) {
             'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-haiku-4-5-20251001',
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }]
         })
@@ -103,7 +90,6 @@ async function llamarClaude(prompt, maxTokens = 1000) {
 }
 
 // ── Handler principal ─────────────────────────────────────────
-
 exports.handler = async (event) => {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
