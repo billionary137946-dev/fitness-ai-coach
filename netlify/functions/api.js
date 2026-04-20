@@ -1,28 +1,40 @@
 // ═══════════════════════════════════════════════════════════════
-// 🚀 API.JS — Backend completo (Telegram + Claude proxy)
+// 🚀 API.JS — Backend completo (Telegram + OpenAI proxy)
 // ═══════════════════════════════════════════════════════════════
 // Variables de entorno requeridas en Netlify:
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
-//   TELEGRAM_BOT_TOKEN, CLAUDE_API_KEY
+//   TELEGRAM_BOT_TOKEN, OPENAI_API_KEY
 
 const admin = require('firebase-admin');
-
-if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-        })
-    });
-}
-
-const db = admin.firestore();
 
 const EJERCICIOS_VALIDOS = [
     'sentadilla', 'peso_muerto', 'press_banca',
     'press_militar', 'hip_thrust', 'jalon_remo'
 ];
+
+// ── Firebase init (lazy) ──────────────────────────────────────
+function getDB() {
+    if (!admin.apps.length) {
+        const privateKey = process.env.FIREBASE_PRIVATE_KEY
+            ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+            : undefined;
+
+        console.log('Iniciando Firebase:', {
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKeyStart: privateKey ? privateKey.substring(0, 40) : 'MISSING'
+        });
+
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey
+            })
+        });
+    }
+    return admin.firestore();
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -48,7 +60,7 @@ async function enviarMensaje(chatId, texto) {
     });
 }
 
-async function registrarEjercicio(userId, ejercicio, peso, repeticiones) {
+async function registrarEjercicio(db, userId, ejercicio, peso, repeticiones) {
     const fecha = new Date().toISOString().split('T')[0];
     const rm = calcularRM(peso, repeticiones);
     const ref = db.collection('usuarios').doc(userId).collection('ejercicios').doc(ejercicio);
@@ -88,32 +100,27 @@ async function llamarOpenAI(prompt, maxTokens = 1000) {
 // ── Handler principal ─────────────────────────────────────────
 
 exports.handler = async (event) => {
-    console.log('ENV CHECK:', {
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL ? 'OK' : 'MISSING',
-        privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.substring(0, 50) : 'MISSING',
-        telegramToken: process.env.TELEGRAM_BOT_TOKEN ? 'OK' : 'MISSING',
-        openaiKey: process.env.OPENAI_API_KEY ? 'OK' : 'MISSING'
-    });
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
-    // ── Proxy Claude ─────────────────────────────────────────
+    // ── Proxy OpenAI ─────────────────────────────────────────
     if (event.path.includes('ai-analysis')) {
         try {
             const { prompt, maxTokens } = JSON.parse(event.body);
-            const text = await llamarClaude(prompt, maxTokens || 1000);
+            const text = await llamarOpenAI(prompt, maxTokens || 1000);
             return {
                 statusCode: 200,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text })
             };
         } catch (e) {
+            console.error('OpenAI error:', e);
             return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
         }
     }
 
     // ── Telegram Webhook ─────────────────────────────────────
     try {
+        const db = getDB();
         const update = JSON.parse(event.body);
         if (!update.message?.text) return { statusCode: 200, body: 'OK' };
 
@@ -163,7 +170,7 @@ exports.handler = async (event) => {
             return { statusCode: 200, body: 'OK' };
         }
 
-        const resultado = await registrarEjercicio(userId, datos.ejercicio, datos.peso, datos.repeticiones);
+        const resultado = await registrarEjercicio(db, userId, datos.ejercicio, datos.peso, datos.repeticiones);
         const emoji = resultado.progreso > 0 ? '📈' : resultado.progreso < 0 ? '📉' : '➡️';
 
         await enviarMensaje(chatId,
@@ -176,7 +183,7 @@ exports.handler = async (event) => {
         return { statusCode: 200, body: 'OK' };
 
     } catch (e) {
-        console.error('Error:', e);
+        console.error('Error completo:', e.message, e.stack);
         return { statusCode: 500, body: 'Internal Server Error' };
     }
 };
