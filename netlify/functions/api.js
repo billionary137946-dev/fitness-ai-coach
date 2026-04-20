@@ -88,6 +88,13 @@ async function llamarOpenAI(prompt, maxTokens = 1000) {
 // ── Handler principal ─────────────────────────────────────────
 
 exports.handler = async (event) => {
+    console.log('ENV CHECK:', {
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL ? 'OK' : 'MISSING',
+        privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.substring(0, 50) : 'MISSING',
+        telegramToken: process.env.TELEGRAM_BOT_TOKEN ? 'OK' : 'MISSING',
+        openaiKey: process.env.OPENAI_API_KEY ? 'OK' : 'MISSING'
+    });
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
     // ── Proxy Claude ─────────────────────────────────────────
