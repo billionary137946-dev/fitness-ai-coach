@@ -2,16 +2,17 @@
   publish = "."
   command = "echo 'static'"
 
+[build.environment]
+  NETLIFY_SKIP_SECRET_SCANNING = "true"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
 # Variables de entorno — configurar en Netlify UI → Site settings → Environment variables:
-# FIREBASE_PROJECT_ID
-# FIREBASE_CLIENT_EMAIL
-# FIREBASE_PRIVATE_KEY
+# FIREBASE_SERVICE_ACCOUNT
 # TELEGRAM_BOT_TOKEN
-# OPENAI_API_KEY
+# ANTHROPIC_API_KEY
 
 [[redirects]]
   from = "/api/telegram-webhook"
@@ -29,13 +30,3 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-[build]
-  publish = "."
-  command = "echo 'static'"
-
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-
-[build.environment]
-  NETLIFY_SKIP_SECRET_SCANNING = "true"
