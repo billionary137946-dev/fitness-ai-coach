@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness AI Coach</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Syne', sans-serif; }
+        code, .mono { font-family: 'DM Mono', monospace; }
+        .hidden { display: none !important; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        :root {
+            --bg: #0d0d0f;
+            --surface: #16161a;
+            --border: #2a2a32;
+            --accent: #c8f135;
+            --accent2: #7c3aed;
+            --text: #e8e8f0;
+            --muted: #6b6b80;
+        }
+        body { background: var(--bg); color: var(--text); }
+
+        /* ── Login ── */
+        #login-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse 80% 60% at 50% 0%, #1a1a2e 0%, var(--bg) 70%);
+        }
+        .login-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 48px;
+            width: 100%;
+            max-width: 420px;
+        }
+        .login-card h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            margin-bottom: 8px;
+        }
+        .login-card p { color: var(--muted); margin-bottom: 32px; font-size: 0.9rem; }
+        .input-field {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        .input-field:focus { border-color: var(--accent); }
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #0d0d0f;
+            border: none;
+            border-radius: 10px;
+            padding: 13px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover { opacity: 0.88; }
+        .btn-primary:active { transform: scale(0.98); }
+
+        /* ── Dashboard layout ── */
+        #dashboard-section { min-height: 100vh; padding: 24px; }
+        .dash-grid {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto;
+            gap: 20px;
+        }
+        @media (max-width: 1024px) { .dash-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 640px)  { .dash-grid { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+        }
+        .card-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .card-value {
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1;
+        }
+
+        /* ── Header ── */
+        .dash-header {
+            max-width: 1280px;
+            margin: 0 auto 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .dash-header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+        .dash-header span { color: var(--accent); }
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 7px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: border-color 0.2s, color 0.2s;
+        }
+        .btn-logout:hover { border-color: #ef4444; color: #ef4444; }
+
+        /* ── Stats row ── */
+        .stats-row {
+            max-width: 1280px;
+            margin: 0 auto 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        @media (max-width: 640px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+
+        /* ── Ejercicio items ── */
+        .ej-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 10px;
+        }
+        .ej-item:hover { border-color: var(--accent); background: #c8f13508; }
+        .ej-name { font-weight: 700; text-transform: capitalize; font-size: 0.95rem; }
+        .ej-detail { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-family: 'DM Mono', monospace; }
+        .ej-rm { font-weight: 800; font-size: 1.1rem; font-family: 'DM Mono', monospace; }
+        .ej-prog { font-size: 0.78rem; font-family: 'DM Mono', monospace; }
+        .pos { color: #4ade80; }
+        .neg { color: #f87171; }
+        .neu { color: var(--muted); }
+
+        /* ── AI box ── */
+        .ai-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 1px solid #7c3aed44;
+            border-radius: 16px;
+            padding: 24px;
+            grid-column: span 1;
+        }
+        .ai-card h2 { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #a78bfa; margin-bottom: 12px; }
+        .ai-text { font-size: 0.85rem; line-height: 1.65; color: #c4c4d4; white-space: pre-line; }
+        .btn-refresh {
+            margin-top: 16px;
+            width: 100%;
+            background: transparent;
+            border: 1px solid #7c3aed55;
+            color: #a78bfa;
+            border-radius: 8px;
+            padding: 9px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-refresh:hover { background: #7c3aed22; }
+
+        /* ── Modal ── */
+        #ejercicio-modal {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75);
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px; z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+        .modal-inner {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            max-width: 760px; width: 100%;
+            max-height: 90vh; overflow-y: auto;
+            padding: 32px;
+        }
+        .modal-stat {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .modal-stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+        .modal-stat-val { font-size: 1.6rem; font-weight: 800; font-family: 'DM Mono', monospace; margin-top: 4px; }
+
+        /* ── Historial rows ── */
+        .hist-row {
+            display: flex; justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .hist-row span:last-child { color: var(--accent); }
+
+        /* ── Composicion ── */
+        .comp-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+        .comp-row:last-child { border-bottom: none; }
+        .comp-row span:last-child { font-family: 'DM Mono', monospace; font-weight: 600; }
+
+        /* ── Diagnostico ── */
+        .diag-badge { padding: 12px 16px; border-radius: 10px; font-size: 0.85rem; }
+
+        /* ── Loading ── */
+        .loading { color: var(--muted); font-size: 0.85rem; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="login-section">
+    <div class="login-card fade-in">
+        <h1>💪 Fitness<br><span style="color:var(--accent)">AI Coach</span></h1>
+        <p>Ingresa tu User ID para ver tu dashboard</p>
+        <input type="text" id="user-id-input" class="input-field" placeholder="Tu User ID (ej: 123456789)"
+               onkeydown="if(event.key==='Enter') app.login()">
+        <button class="btn-primary" onclick="app.login()">Entrar →</button>
+    </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- DASHBOARD -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="dashboard-section" class="hidden">
+
+    <!-- Header -->
+    <div class="dash-header">
+        <div>
+            <h1>💪 <span id="user-name">Cargando...</span></h1>
+            <p style="font-size:0.78rem;color:var(--muted);margin-top:2px">Fitness AI Coach</p>
+        </div>
+        <button class="btn-logout" onclick="app.logout()">Cerrar sesión</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="card-label">Índice Fuerza</div>
+            <div class="card-value" style="color:var(--accent)" id="stat-fuerza">—</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:4px" id="stat-fuerza-tendencia">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="card-label">Fatiga Promedio</div>
+            <div class="card-value" style="color:#fb923c" id="stat-fatiga">—</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">índice</div>
+        </div>
+        <div class="stat-card">
+            <div class="card-label">Progreso Semanal</div>
+            <div class="card-value" style="color:#4ade80" id="stat-progreso">—</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">kg ganados</div>
+        </div>
+        <div class="stat-card">
+            <div class="card-label">Fase Actual</div>
+            <div class="card-value" style="font-size:1.4rem;color:#a78bfa" id="stat-fase">—</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:4px" id="stat-semana">—</div>
+        </div>
+    </div>
+
+    <!-- Main grid -->
+    <div class="dash-grid">
+
+        <!-- Gráfica RM (col span 2) -->
+        <div class="card" style="grid-column: span 2">
+            <div class="card-label" style="margin-bottom:16px">📊 Progreso RM por Ejercicio</div>
+            <canvas id="chart-rm-progress" height="90"></canvas>
+        </div>
+
+        <!-- AI Analysis -->
+        <div class="ai-card">
+            <h2>🤖 Análisis IA</h2>
+            <div id="ai-analysis-content" class="ai-text loading">Cargando análisis...</div>
+            <button class="btn-refresh" onclick="app.refreshAIAnalysis()">↻ Actualizar análisis</button>
+        </div>
+
+        <!-- Ejercicios -->
+        <div class="card" style="grid-column: span 2">
+            <div class="card-label" style="margin-bottom:16px">💪 Tus Ejercicios</div>
+            <div id="ejercicios-list"></div>
+        </div>
+
+        <!-- Lateral: Composición + Diagnóstico -->
+        <div style="display:flex;flex-direction:column;gap:20px">
+            <div class="card">
+                <div class="card-label" style="margin-bottom:12px">📏 Composición Corporal</div>
+                <div id="composicion-data"><span class="loading">Cargando...</span></div>
+            </div>
+            <div class="card">
+                <div class="card-label" style="margin-bottom:12px">⚡ Diagnóstico</div>
+                <div id="diagnostico-content"><span class="loading">Cargando...</span></div>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- MODAL EJERCICIO DETALLE -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div id="ejercicio-modal" class="hidden">
+    <div class="modal-inner fade-in">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+            <h2 style="font-size:1.5rem;font-weight:800;text-transform:capitalize;letter-spacing:-0.03em" id="modal-ejercicio-nombre">—</h2>
+            <button onclick="closeModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.4rem">✕</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
+            <div class="modal-stat">
+                <div class="modal-stat-label">RM Actual</div>
+                <div class="modal-stat-val" style="color:var(--accent)" id="modal-rm-actual">—</div>
+            </div>
+            <div class="modal-stat">
+                <div class="modal-stat-label">Progreso</div>
+                <div class="modal-stat-val" style="color:#4ade80" id="modal-progreso">—</div>
+            </div>
+            <div class="modal-stat">
+                <div class="modal-stat-label">Fatiga</div>
+                <div class="modal-stat-val" style="color:#fb923c" id="modal-fatiga">—</div>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px">
+            <div class="card-label" style="margin-bottom:12px">Evolución RM</div>
+            <canvas id="modal-chart-rm" height="80"></canvas>
+        </div>
+
+        <div style="background:#1a1a2e;border:1px solid #7c3aed33;border-radius:12px;padding:18px;margin-bottom:20px">
+            <div class="card-label" style="color:#a78bfa;margin-bottom:8px">🤖 Análisis Específico</div>
+            <div id="modal-ai-analysis" class="ai-text loading">Cargando...</div>
+        </div>
+
+        <div>
+            <div class="card-label" style="margin-bottom:10px">📅 Historial (Últimos 10)</div>
+            <div id="modal-historial"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<script>
+// ── Config Firebase (claves públicas — OK en cliente) ─────────
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyC1k9m8yJ9PvsjoNt4DiOPAzdv0E38qvpY",
+    authDomain: "homegym-5c4a3.firebaseapp.com",
+    databaseURL: "https://homegym-5c4a3-default-rtdb.firebaseio.com",
+    projectId: "homegym-5c4a3",
+    storageBucket: "homegym-5c4a3.firebasestorage.app",
+    messagingSenderId: "8315635814",
+    appId: "1:8315635814:web:265f7fcc439339085645a7",
+    measurementId: "G-6KJBCRS2NY"
+};
+
+const EJERCICIOS = ['sentadilla','peso_muerto','press_banca','press_militar','hip_thrust','jalon_remo'];
+
+// ── Firebase ──────────────────────────────────────────────────
+if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+let currentUserId = null;
+
+function calcularRM(peso, reps) {
+    return reps === 1 ? peso : Math.round(peso * (36 / (37 - reps)));
+}
+
+async function getDoc(path) {
+    const ref = path.reduce((acc, seg, i) =>
+        i % 2 === 0 ? acc.collection(seg) : acc.doc(seg), db);
+    const doc = await ref.get();
+    return doc.exists ? doc.data() : null;
+}
+
+async function getUsuario()      { return getDoc(['usuarios', currentUserId]); }
+async function getComposicion()  {
+    const snap = await db.collection('usuarios').doc(currentUserId)
+        .collection('composicion_corporal').orderBy('fecha','desc').limit(1).get();
+    return snap.empty ? null : snap.docs[0].data();
+}
+async function getFuerza()       { return getDoc(['usuarios', currentUserId, 'fuerza', 'actual']); }
+async function getEjercicio(ej)  { return getDoc(['usuarios', currentUserId, 'ejercicios', ej]); }
+async function getAllEjercicios() {
+    const out = {};
+    for (const ej of EJERCICIOS) {
+        const d = await getEjercicio(ej);
+        if (d) out[ej] = d;
+    }
+    return out;
+}
+async function getHistorial(ej, limit = 10) {
+    const snap = await db.collection('usuarios').doc(currentUserId)
+        .collection('ejercicios').doc(ej)
+        .collection('historial').orderBy('fecha','desc').limit(limit).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// ── Claude proxy (via serverless function) ────────────────────
+async function llamarClaude(prompt, maxTokens = 1000) {
+    const res = await fetch('/api/ai-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, maxTokens })
+    });
+    const data = await res.json();
+    return data.text || 'Error al obtener análisis.';
+}
+
+function buildPromptGeneral({ usuario, composicion, fuerza, ejercicios }) {
+    return `Eres un entrenador personal experto. Analiza estos datos:
+
+USUARIO: ${usuario.nombre}, ${usuario.edad} años, objetivo: ${usuario.configuracion_usuario?.objetivo}, nivel: ${usuario.configuracion_usuario?.nivel_experiencia}
+
+COMPOSICIÓN: Peso ${composicion?.peso_kg}kg, grasa ${composicion?.pgc_porcentaje}%, músculo ${composicion?.masa_musculo_esqueletico_kg}kg
+
+FUERZA: índice global ${fuerza?.indice_fuerza_global?.valor} (${fuerza?.indice_fuerza_global?.clasificacion}), fatiga ${fuerza?.metricas_globales?.fatiga_promedio}, progreso semanal +${fuerza?.metricas_globales?.progreso_semanal}kg, fase ${fuerza?.planificacion?.fase_global} semana ${fuerza?.planificacion?.semana_actual}
+
+EJERCICIOS:
+${Object.entries(ejercicios).map(([n,d]) =>
+`- ${n}: ${d.ultimo_registro?.peso}kg x${d.ultimo_registro?.repeticiones} reps | RM ${d.rm_estimado_actual}kg | progreso ${d.progreso>0?'+':''}${d.progreso}kg | fatiga ${d.fatiga}`
+).join('\n')}
+
+Da análisis conciso (3-4 párrafos, máx 250 palabras): evaluación general, puntos fuertes/débiles, recomendaciones próxima semana, alertas fatiga. Sé directo y motivador.`;
+}
+
+function buildPromptEjercicio(nombre, datos, historial) {
+    return `Analiza el progreso en ${nombre.replace('_',' ').toUpperCase()}:
+
+RM actual: ${datos.rm_estimado_actual}kg | Último: ${datos.ultimo_registro?.peso}kg x${datos.ultimo_registro?.repeticiones} | Progreso: ${datos.progreso>0?'+':''}${datos.progreso}kg | Fatiga: ${datos.fatiga}
+
+HISTORIAL (últimos 5):
+${historial.slice(0,5).map(h=>`${h.fecha}: ${h.peso}kg x${h.repeticiones} (RM ${h.rm_estimado}kg)`).join('\n')}
+
+En 2-3 párrafos (máx 150 palabras): tendencia y progreso, recomendación específica de peso/reps para próxima sesión, alertas de riesgo. Sé específico con números.`;
+}
+
+// ── Charts ────────────────────────────────────────────────────
+const charts = {};
+const COLORES = {
+    sentadilla:'#c8f135', peso_muerto:'#f87171', press_banca:'#4ade80',
+    press_militar:'#fb923c', hip_thrust:'#a78bfa', jalon_remo:'#38bdf8'
+};
+
+const CHART_OPTS = {
+    responsive: true,
+    plugins: { legend: { labels: { color: '#6b6b80', font: { size: 11 } } } },
+    scales: {
+        x: { ticks: { color: '#6b6b80' }, grid: { color: '#2a2a32' } },
+        y: { ticks: { color: '#6b6b80' }, grid: { color: '#2a2a32' }, beginAtZero: false }
+    }
+};
+
+function renderProgresoRM(id, ejercicios) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(ejercicios).map(n => n.replace('_',' ')),
+            datasets: [{
+                label: 'RM Actual (kg)',
+                data: Object.values(ejercicios).map(d => d.rm_estimado_actual || 0),
+                backgroundColor: Object.keys(ejercicios).map(n => (COLORES[n]||'#6b6b80') + 'cc'),
+                borderColor: Object.keys(ejercicios).map(n => COLORES[n]||'#6b6b80'),
+                borderWidth: 2, borderRadius: 6
+            }]
+        },
+        options: { ...CHART_OPTS, plugins: { ...CHART_OPTS.plugins, legend: { display: false } } }
+    });
+}
+
+function renderHistorial(id, historial) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    const sorted = [...historial].reverse();
+    charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: sorted.map(h => h.fecha),
+            datasets: [{
+                label: 'RM Estimado (kg)',
+                data: sorted.map(h => h.rm_estimado),
+                borderColor: '#c8f135', backgroundColor: '#c8f13520',
+                fill: true, tension: 0.4, pointRadius: 4,
+                pointBackgroundColor: '#c8f135'
+            }]
+        },
+        options: { ...CHART_OPTS, plugins: { ...CHART_OPTS.plugins, legend: { display: false } } }
+    });
+}
+
+// ── UI helpers ────────────────────────────────────────────────
+function showSection(id) {
+    ['login-section','dashboard-section'].forEach(s => {
+        document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+    if (id === 'dashboard-section') document.getElementById(id).classList.add('fade-in');
+}
+
+function progresoClass(v) { return v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu'; }
+function progresoStr(v)   { return (v > 0 ? '+' : '') + v + ' kg'; }
+
+function renderEjercicios(ejercicios) {
+    document.getElementById('ejercicios-list').innerHTML =
+        Object.entries(ejercicios).map(([n, d]) => `
+            <div class="ej-item" onclick="app.verEjercicio('${n}')">
+                <div>
+                    <div class="ej-name">${n.replace(/_/g,' ')}</div>
+                    <div class="ej-detail">${d.ultimo_registro?.peso}kg × ${d.ultimo_registro?.repeticiones} reps</div>
+                </div>
+                <div style="text-align:right">
+                    <div class="ej-rm" style="color:${COLORES[n]||'#c8f135'}">${d.rm_estimado_actual} kg</div>
+                    <div class="ej-prog ${progresoClass(d.progreso)}">${progresoStr(d.progreso)}</div>
+                </div>
+            </div>
+        `).join('');
+}
+
+function renderComposicion(c) {
+    if (!c) { document.getElementById('composicion-data').innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Sin datos</span>'; return; }
+    document.getElementById('composicion-data').innerHTML = [
+        ['Peso', c.peso_kg + ' kg'],
+        ['Grasa corporal', c.pgc_porcentaje + '%'],
+        ['Músculo esquelético', c.masa_musculo_esqueletico_kg + ' kg'],
+        ['TMB', c.tasa_metabolica_basal_kcal + ' kcal'],
+        ['IMC', c.imc]
+    ].map(([k,v]) => `<div class="comp-row"><span style="color:var(--muted)">${k}</span><span>${v}</span></div>`).join('');
+}
+
+function renderDiagnostico(fuerza) {
+    const d = fuerza?.metricas_globales?.diagnostico_global;
+    if (!d) return;
+    const colors = { progresando: '#4ade8022', estancado: '#fb923c22', retrocediendo: '#f8717122' };
+    const border = { progresando: '#4ade80', estancado: '#fb923c', retrocediendo: '#f87171' };
+    document.getElementById('diagnostico-content').innerHTML = `
+        <div class="diag-badge" style="background:${colors[d.estado]||'#ffffff11'};border:1px solid ${border[d.estado]||'#6b6b80'}">
+            <div style="font-weight:700;text-transform:capitalize;margin-bottom:4px">${d.estado}</div>
+            <div style="font-size:0.82rem;color:var(--muted)">${d.mensaje}</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:6px;font-family:'DM Mono',monospace">${d.accion?.replace('_',' ')}</div>
+        </div>`;
+}
+
+function closeModal() { document.getElementById('ejercicio-modal').classList.add('hidden'); }
+
+// ── App principal ─────────────────────────────────────────────
+const app = {
+    async login() {
+        const userId = document.getElementById('user-id-input').value.trim();
+        if (!userId) return alert('Ingresa tu User ID');
+        currentUserId = userId;
+        const usuario = await getUsuario();
+        if (!usuario) { currentUserId = null; return alert('Usuario no encontrado'); }
+        showSection('dashboard-section');
+        await this.cargarDashboard();
+    },
+
+    logout() {
+        currentUserId = null;
+        showSection('login-section');
+    },
+
+    async cargarDashboard() {
+        const [usuario, composicion, fuerza, ejercicios] = await Promise.all([
+            getUsuario(), getComposicion(), getFuerza(), getAllEjercicios()
+        ]);
+
+        document.getElementById('user-name').textContent = usuario.nombre || 'Usuario';
+        document.getElementById('stat-fuerza').textContent = fuerza?.indice_fuerza_global?.valor || '—';
+        document.getElementById('stat-fuerza-tendencia').textContent = fuerza?.indice_fuerza_global?.tendencia || '—';
+        document.getElementById('stat-fatiga').textContent = (fuerza?.metricas_globales?.fatiga_promedio||0).toFixed(2);
+        document.getElementById('stat-progreso').textContent = '+' + (fuerza?.metricas_globales?.progreso_semanal||0) + ' kg';
+        document.getElementById('stat-fase').textContent = fuerza?.planificacion?.fase_global || '—';
+        document.getElementById('stat-semana').textContent = 'Semana ' + (fuerza?.planificacion?.semana_actual||0);
+
+        renderComposicion(composicion);
+        renderDiagnostico(fuerza);
+        renderEjercicios(ejercicios);
+        renderProgresoRM('chart-rm-progress', ejercicios);
+
+        document.getElementById('ai-analysis-content').className = 'ai-text loading';
+        document.getElementById('ai-analysis-content').textContent = 'Generando análisis...';
+        const analisis = await llamarClaude(buildPromptGeneral({ usuario, composicion, fuerza, ejercicios }));
+        document.getElementById('ai-analysis-content').className = 'ai-text';
+        document.getElementById('ai-analysis-content').textContent = analisis;
+    },
+
+    async refreshAIAnalysis() {
+        const btn = document.querySelector('.btn-refresh');
+        btn.textContent = '⏳ Cargando...';
+        btn.disabled = true;
+        const [usuario, composicion, fuerza, ejercicios] = await Promise.all([
+            getUsuario(), getComposicion(), getFuerza(), getAllEjercicios()
+        ]);
+        const analisis = await llamarClaude(buildPromptGeneral({ usuario, composicion, fuerza, ejercicios }));
+        document.getElementById('ai-analysis-content').textContent = analisis;
+        btn.textContent = '↻ Actualizar análisis';
+        btn.disabled = false;
+    },
+
+    async verEjercicio(nombre) {
+        document.getElementById('ejercicio-modal').classList.remove('hidden');
+        document.getElementById('modal-ejercicio-nombre').textContent = nombre.replace(/_/g,' ');
+        document.getElementById('modal-ai-analysis').className = 'ai-text loading';
+        document.getElementById('modal-ai-analysis').textContent = 'Generando análisis...';
+
+        const [data, historial] = await Promise.all([getEjercicio(nombre), getHistorial(nombre)]);
+
+        document.getElementById('modal-rm-actual').textContent = (data?.rm_estimado_actual||0) + ' kg';
+        document.getElementById('modal-progreso').textContent = progresoStr(data?.progreso||0);
+        document.getElementById('modal-fatiga').textContent = (data?.fatiga||0).toFixed(2);
+
+        document.getElementById('modal-historial').innerHTML = historial.map(h => `
+            <div class="hist-row">
+                <span>${h.fecha}</span>
+                <span>${h.peso}kg × ${h.repeticiones} reps</span>
+                <span>RM ${h.rm_estimado}kg</span>
+            </div>`).join('');
+
+        renderHistorial('modal-chart-rm', historial);
+
+        const analisis = await llamarClaude(buildPromptEjercicio(nombre, data, historial), 500);
+        document.getElementById('modal-ai-analysis').className = 'ai-text';
+        document.getElementById('modal-ai-analysis').textContent = analisis;
+    }
+};
+</script>
+</body>
+</html>
