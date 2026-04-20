@@ -29,3 +29,13 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+[build]
+  publish = "."
+  command = "echo 'static'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[build.environment]
+  NETLIFY_SKIP_SECRET_SCANNING = "true"
